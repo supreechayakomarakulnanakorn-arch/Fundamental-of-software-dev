@@ -1,26 +1,38 @@
 """
 university.py
-University System + Authentication routing (lowercase menu)
+University System + Authentication routing
 
-- University menu: (a) admin / (s) student / (x) exit
-- Admin routes to AdminSystem (no admin login per brief)
-- Student routes to StudentSystem (login/register/exit) — provided by Person 2
-- If StudentSystem not found, fallback student menu allows register/login
-  and saves to students.data (visible in Admin → show)
+Person 1 – University System + Authentication
+---------------------------------------------
+- Main menu: (a) admin / (s) student / (x) exit
+- Admin → AdminSystem (requires admin login)
+- Student → StudentSystem (Person 2) or fallback register/login
+- After successful student login → Subject Enrolment System (Person 3)
 """
 
 from __future__ import annotations
-from typing import List, Dict, Any
+from typing import Any, Dict, Optional
 
 from database import Database
 from admin import AdminSystem
 from validation import is_valid_email, is_valid_password, generate_student_id
 
-# Try importing Person 2's file if it exists
+# -------- Admin auth config --------
+REQUIRE_ADMIN_LOGIN = True
+ADMIN_EMAIL = "admin@university.com"
+ADMIN_PASSWORD = "Admin2000"   # Meets rule: Uppercase + ≥5 letters + ≥3 digits
+
+# Try importing Person 2 (Student System)
 try:
-    from student_system import StudentSystem
+    from student import StudentSystem  # must return a logged-in student dict on success
 except ImportError:
-    StudentSystem = None  # fallback mode active
+    StudentSystem = None  # type: ignore
+
+# Try importing Person 3 (Enrolment System)
+try:
+    from enrollment import StudentEnrolmentSystem
+except ImportError:
+    StudentEnrolmentSystem = None  # type: ignore
 
 
 # ---------- small utility ----------
@@ -38,105 +50,154 @@ class UniversityApp:
     # ----------------- University Menu -----------------
     def start(self) -> None:
         while True:
-            print("\nuniversity system")
+            print("\n=== University System ===")
             print("(a) admin")
             print("(s) student")
             print("(x) exit")
             choice = (input("> ") or "").strip().lower()
 
             if choice == "a":
-                self.admin_sys.menu()
+                if not REQUIRE_ADMIN_LOGIN or self._admin_login():
+                    self.admin_sys.menu()
+                else:
+                    print("Admin login failed.")
 
             elif choice == "s":
-                if self.student_sys is not None:
-                    self.student_sys.menu()           # use real student system (Person 2)
-                else:
-                    self._student_menu_fallback()     # fallback for now
+                self._student_entrypoint()
 
             elif _is_exit(choice):
-                print("goodbye!")
+                print("Goodbye!")
                 break
 
             else:
-                print("invalid option. please try again.")
+                print("Invalid option. Please try again.")
+
+    # ----------------- Admin login (required if enabled) -----------------
+    def _admin_login(self) -> bool:
+        """
+        Fixed-credential admin login with validation and up to 3 attempts.
+        Uses the same email/password rules as students for consistency.
+        """
+        print("\n--- Admin Login ---")
+        attempts = 3
+        while attempts > 0:
+            email = input("Email: ").strip()
+            password = input("Password: ").strip()
+
+            # Optional: reuse validation rules for consistency
+            if not is_valid_email(email):
+                print("Invalid email format. Must end with @university.com.")
+                attempts -= 1
+                continue
+            if not is_valid_password(password):
+                print("Invalid password format (Uppercase + 5+ letters + 3+ digits).")
+                attempts -= 1
+                continue
+
+            if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+                print("Login successful. Welcome, Admin!")
+                return True
+
+            print("Incorrect admin credentials.")
+            attempts -= 1
+
+        return False
+
+    # ----------------- Student entrypoint -----------------
+    def _student_entrypoint(self) -> None:
+        if self.student_sys is not None:
+            # Use Person 2's system
+            student = self.student_sys.menu()
+            self._launch_enrolment_if_ready(student)
+        else:
+            # Fallback mini student system
+            self._student_menu_fallback()
 
     # ----------------- Fallback Student Menu -----------------
     def _student_menu_fallback(self) -> None:
         while True:
-            print("\nthe student system")
+            print("\n--- Student System (Fallback) ---")
             print("(l) login")
             print("(r) register")
             print("(x) exit")
             choice = (input("> ") or "").strip().lower()
 
             if choice == "l":
-                self._login_flow_fallback()
+                student = self._login_flow_fallback()
+                self._launch_enrolment_if_ready(student)
             elif choice == "r":
                 self._register_flow_fallback()
             elif _is_exit(choice):
                 return
             else:
-                print("invalid option. please try again.")
+                print("Invalid option. Please try again.")
+
+    # ----------------- Enrolment launcher -----------------
+    def _launch_enrolment_if_ready(self, student: Optional[Dict[str, Any]]) -> None:
+        if student:
+            if StudentEnrolmentSystem is not None:
+                StudentEnrolmentSystem(self.db, student).menu()
+            else:
+                print("Enrolment system not found (missing enrollment.py).")
 
     # ----------------- Login (Fallback) -----------------
-    def _login_flow_fallback(self) -> None:
-        email = input("enter email (or 'x' to cancel): ").strip()
+    def _login_flow_fallback(self) -> Optional[Dict[str, Any]]:
+        email = input("Enter email (or 'x' to cancel): ").strip()
         if _is_exit(email):
-            print("login cancelled.")
-            return
+            print("Login cancelled.")
+            return None
 
-        password = input("enter password (or 'x' to cancel): ").strip()
+        password = input("Enter password (or 'x' to cancel): ").strip()
         if _is_exit(password):
-            print("login cancelled.")
-            return
+            print("Login cancelled.")
+            return None
 
         if not is_valid_email(email):
-            print("error: incorrect email format. (must end with @university.com)")
-            return
+            print("Error: invalid email format. Must end with @university.com.")
+            return None
         if not is_valid_password(password):
-            print("error: incorrect password format.")
-            print("password must start with an uppercase, contain at least five letters total, and end with three or more digits.")
-            return
+            print("Error: invalid password format (uppercase + 5 letters + 3 digits).")
+            return None
 
         student = self.db.find_by_email(email)
         if student and student.get("password") == password:
-            print("login successful.")
-            # Person 3's Subject Enrolment System can be launched here later
-        else:
-            print("login failed. please check your credentials.")
+            print(f"Login successful. Welcome, {student.get('name', 'student')}!")
+            return student
+
+        print("Login failed. Please check your credentials.")
+        return None
 
     # ----------------- Register (Fallback) -----------------
     def _register_flow_fallback(self) -> None:
-        name = input("enter name (or 'x' to cancel): ").strip()
+        name = input("Enter name (or 'x' to cancel): ").strip()
         if _is_exit(name):
-            print("registration cancelled.")
+            print("Registration cancelled.")
             return
 
-        email = input("enter email (or 'x' to cancel): ").strip()
+        email = input("Enter email (or 'x' to cancel): ").strip()
         if _is_exit(email):
-            print("registration cancelled.")
+            print("Registration cancelled.")
             return
 
-        password = input("enter password (or 'x' to cancel): ").strip()
+        password = input("Enter password (or 'x' to cancel): ").strip()
         if _is_exit(password):
-            print("registration cancelled.")
+            print("Registration cancelled.")
             return
 
         if not name:
-            print("error: name cannot be empty.")
+            print("Error: name cannot be empty.")
             return
         if not is_valid_email(email):
-            print("error: incorrect email format. (must end with @university.com)")
+            print("Error: invalid email format. Must end with @university.com.")
             return
         if not is_valid_password(password):
-            print("error: incorrect password format.")
-            print("password must start with an uppercase, contain at least five letters total, and end with three or more digits.")
+            print("Error: invalid password format (uppercase + 5 letters + 3 digits).")
             return
         if self.db.find_by_email(email):
-            print("registration failed. the student may already exist.")
+            print("Registration failed. Student already exists.")
             return
 
-        existing_ids = [s["id"] for s in self.db.get_all()]
+        existing_ids = [str(s.get("id")) for s in self.db.get_all()]
         sid = generate_student_id(existing_ids)
         student = {
             "id": sid,
@@ -144,16 +205,16 @@ class UniversityApp:
             "email": email,
             "password": password,
             "subjects": [],
-            # optional convenience fields for Admin seed compatibility:
             "average": 0.0,
             "grade": "Z",
+            "status": "FAIL",
         }
 
         if self.db.add_student(student):
-            print(f"registration successful. your student id is {sid}.")
-            print("you can now login or view your record in admin → show.")
+            print(f"Registration successful. Your Student ID is {sid}.")
+            print("You can now log in and manage enrolments.")
         else:
-            print("registration failed. the student may already exist.")
+            print("Registration failed (duplicate or write error).")
 
 
 # ----------------- Run Standalone -----------------

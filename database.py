@@ -2,16 +2,16 @@
 database.py
 Pickle-backed Database for Student records stored in students.data
 
-Student dict structure expected:
+Student dict structure:
 {
   "id": "000123",
   "name": "Alice",
   "email": "alice@university.com",
   "password": "StartX999",
-  "subjects": [
-      {"id": "101", "mark": 78, "grade": "D"},
-      ...
-  ]
+  "subjects": [{"id":"101","mark":78,"grade":"D"}],
+  "average": 0.0,
+  "grade": "Z",
+  "status": "FAIL" | "PASS"
 }
 """
 

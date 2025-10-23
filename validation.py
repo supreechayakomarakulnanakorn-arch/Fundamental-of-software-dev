@@ -27,7 +27,7 @@ def generate_student_id(existing_ids: Iterable[str] | None = None) -> str:
     """
     Random 1..999999 → zero-padded 6-digit string. Avoid collisions using existing_ids.
     """
-    existing: Set[str] = set(existing_ids or [])
+    existing: Set[str] = set(map(str, existing_ids or []))
     while True:
         sid = f"{random.randint(1, 999_999):06d}"
         if sid not in existing:
@@ -37,7 +37,7 @@ def generate_subject_id(existing_ids: Iterable[str] | None = None) -> str:
     """
     Random 1..999 → zero-padded 3-digit string. Avoid collisions using existing_ids.
     """
-    existing: Set[str] = set(existing_ids or [])
+    existing: Set[str] = set(map(str, existing_ids or []))
     while True:
         sub_id = f"{random.randint(1, 999):03d}"
         if sub_id not in existing:
