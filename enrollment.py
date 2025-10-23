@@ -99,7 +99,7 @@ class StudentEnrolmentSystem:
         self.student["subjects"] = new_list
         self._update_student_stats()
         self.db.update_student(self.student)
-        print(f"🗑️ Subject {sid} removed successfully.")
+        print(f"Subject {sid} removed successfully.")
 
     # ----------- Show Subjects -----------
     def show_subjects(self):
@@ -147,3 +147,4 @@ class StudentEnrolmentSystem:
         self.student["average"] = round(avg, 2)
         self.student["grade"] = mark_to_grade(int(round(avg)))
         self.student["status"] = "PASS" if avg >= 50 else "FAIL"
+
